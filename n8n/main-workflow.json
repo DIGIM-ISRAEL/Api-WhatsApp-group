@@ -1,0 +1,220 @@
+{
+  "name": "WhatsApp Group Watcher (GREEN-API to Peach)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "peach-wa-group-sync",
+        "responseMode": "onReceived",
+        "responseCode": 200,
+        "responseData": "ok",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "GREEN-API Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-400, -160]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// EDIT ME: same list must also be edited in the \"Config\" node of the poll branch below.\nconst watchedGroups = [\n  { chatId: \"120363012345678901@g.us\", label: \"\\u05dc\\u05e7\\u05d5\\u05d7\\u05d5\\u05ea VIP\" },\n  { chatId: \"120363019876543210@g.us\", label: \"\\u05e7\\u05d1\\u05d5\\u05e6\\u05ea \\u05ea\\u05de\\u05d9\\u05db\\u05d4\" }\n];\nreturn items.map(item => ({ json: { ...item.json, watchedGroups } }));"
+      },
+      "id": "webhook-config",
+      "name": "Config (webhook branch)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-180, -160]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is-message",
+              "leftValue": "={{$json.body.typeWebhook}}",
+              "rightValue": "incomingMessageReceived",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-is-message",
+      "name": "Is incomingMessageReceived?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [40, -160]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nstaticData.knownMembers = staticData.knownMembers || {};\n\nconst output = [];\nfor (const item of items) {\n  const watchedGroups = item.json.watchedGroups;\n  const sd = item.json.body && item.json.body.senderData;\n  if (!sd) continue;\n  const group = watchedGroups.find(g => g.chatId === sd.chatId);\n  if (!group) continue;\n\n  const known = new Set(staticData.knownMembers[group.chatId] || []);\n  if (known.has(sd.sender)) continue;\n\n  const rawPhone = sd.sender.split('@')[0];\n  const displayName = sd.senderName || sd.senderContactName || '';\n  const parts = displayName.split(' ').filter(Boolean);\n\n  output.push({ json: {\n    rawPhone,\n    groupLabel: group.label,\n    chatId: group.chatId,\n    sender: sd.sender,\n    firstName: parts[0] || '',\n    lastName: parts.slice(1).join(' ') || ''\n  }});\n}\nreturn output;"
+      },
+      "id": "match-dedup",
+      "name": "Match group and dedup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, -160]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": "REPLACE_WITH_SUBWORKFLOW_ID",
+        "workflowInputs": {
+          "value": {
+            "rawPhone": "={{$json.rawPhone}}",
+            "groupLabel": "={{$json.groupLabel}}",
+            "firstName": "={{$json.firstName}}",
+            "lastName": "={{$json.lastName}}"
+          }
+        }
+      },
+      "id": "execute-sub-webhook",
+      "name": "Upsert Contact (webhook)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [480, -160]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const matched = $('Match group and dedup').item.json;\nconst staticData = $getWorkflowStaticData('global');\nstaticData.knownMembers = staticData.knownMembers || {};\nstaticData.knownMembers[matched.chatId] = staticData.knownMembers[matched.chatId] || [];\nif (!staticData.knownMembers[matched.chatId].includes(matched.sender)) {\n  staticData.knownMembers[matched.chatId].push(matched.sender);\n}\nreturn $input.item;"
+      },
+      "id": "mark-known",
+      "name": "Mark as known",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, -160]
+    },
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 10 }] }
+      },
+      "id": "schedule",
+      "name": "Poll Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-400, 160]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// EDIT ME: same list must also be edited in the \"Config\" node of the webhook branch above.\nconst watchedGroups = [\n  { chatId: \"120363012345678901@g.us\", label: \"\\u05dc\\u05e7\\u05d5\\u05d7\\u05d5\\u05ea VIP\" },\n  { chatId: \"120363019876543210@g.us\", label: \"\\u05e7\\u05d1\\u05d5\\u05e6\\u05ea \\u05ea\\u05de\\u05d9\\u05db\\u05d4\" }\n];\nconst greenApi = {\n  idInstance: \"REPLACE_ME\",\n  tokenInstance: \"REPLACE_ME\",\n  baseUrl: \"https://api.greenapi.com\"\n};\nreturn watchedGroups.map(g => ({ json: { chatId: g.chatId, label: g.label, greenApi } }));"
+      },
+      "id": "poll-config",
+      "name": "Config (poll branch)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-180, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json.greenApi.baseUrl}}/waInstance{{$json.greenApi.idInstance}}/getGroupData/{{$json.greenApi.tokenInstance}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"groupId\": $json.chatId } }}",
+        "options": {}
+      },
+      "id": "get-group-data",
+      "name": "GreenAPI Get Group Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [40, 160]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const group = $('Config (poll branch)').item.json;\nconst response = $json;\nconst currentMembers = (response.participants || []).map(p => p.id);\n\nconst staticData = $getWorkflowStaticData('global');\nstaticData.knownMembers = staticData.knownMembers || {};\nconst known = new Set(staticData.knownMembers[group.chatId] || []);\nconst newMembers = currentMembers.filter(id => !known.has(id));\nstaticData.knownMembers[group.chatId] = currentMembers;\n\nreturn { json: { chatId: group.chatId, label: group.label, greenApi: group.greenApi, newMembers } };"
+      },
+      "id": "diff-members",
+      "name": "Diff members",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, 160]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const output = [];\nfor (const item of items) {\n  const { chatId, label, greenApi, newMembers } = item.json;\n  for (const memberId of newMembers) {\n    output.push({ json: { chatId, label, greenApi, memberId, rawPhone: memberId.split('@')[0] } });\n  }\n}\nreturn output;"
+      },
+      "id": "explode-members",
+      "name": "Explode new members",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json.greenApi.baseUrl}}/waInstance{{$json.greenApi.idInstance}}/getContactInfo/{{$json.greenApi.tokenInstance}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"chatId\": $json.memberId } }}",
+        "options": {}
+      },
+      "id": "get-contact-info",
+      "name": "GreenAPI Get Contact Info",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 160],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const original = $('Explode new members').item.json;\nconst info = $json || {};\nconst displayName = info.name || '';\nconst parts = displayName.split(' ').filter(Boolean);\nreturn { json: {\n  rawPhone: original.rawPhone,\n  groupLabel: original.label,\n  firstName: parts[0] || '',\n  lastName: parts.slice(1).join(' ') || ''\n}};"
+      },
+      "id": "merge-name",
+      "name": "Merge name into item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 160]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": "REPLACE_WITH_SUBWORKFLOW_ID",
+        "workflowInputs": {
+          "value": {
+            "rawPhone": "={{$json.rawPhone}}",
+            "groupLabel": "={{$json.groupLabel}}",
+            "firstName": "={{$json.firstName}}",
+            "lastName": "={{$json.lastName}}"
+          }
+        }
+      },
+      "id": "execute-sub-poll",
+      "name": "Upsert Contact (poll)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [1140, 160]
+    }
+  ],
+  "connections": {
+    "GREEN-API Webhook": { "main": [[{ "node": "Config (webhook branch)", "type": "main", "index": 0 }]] },
+    "Config (webhook branch)": { "main": [[{ "node": "Is incomingMessageReceived?", "type": "main", "index": 0 }]] },
+    "Is incomingMessageReceived?": {
+      "main": [
+        [{ "node": "Match group and dedup", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Match group and dedup": { "main": [[{ "node": "Upsert Contact (webhook)", "type": "main", "index": 0 }]] },
+    "Upsert Contact (webhook)": { "main": [[{ "node": "Mark as known", "type": "main", "index": 0 }]] },
+    "Poll Schedule": { "main": [[{ "node": "Config (poll branch)", "type": "main", "index": 0 }]] },
+    "Config (poll branch)": { "main": [[{ "node": "GreenAPI Get Group Data", "type": "main", "index": 0 }]] },
+    "GreenAPI Get Group Data": { "main": [[{ "node": "Diff members", "type": "main", "index": 0 }]] },
+    "Diff members": { "main": [[{ "node": "Explode new members", "type": "main", "index": 0 }]] },
+    "Explode new members": { "main": [[{ "node": "GreenAPI Get Contact Info", "type": "main", "index": 0 }]] },
+    "GreenAPI Get Contact Info": { "main": [[{ "node": "Merge name into item", "type": "main", "index": 0 }]] },
+    "Merge name into item": { "main": [[{ "node": "Upsert Contact (poll)", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

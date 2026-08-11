@@ -1,0 +1,190 @@
+{
+  "name": "Peach - Upsert Contact In Group",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            { "name": "rawPhone" },
+            { "name": "groupLabel" },
+            { "name": "firstName" },
+            { "name": "lastName" }
+          ]
+        }
+      },
+      "id": "sub-trigger",
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [-200, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const cfg = {\n  baseUrl: \"https://api.peach-in.com/v4\",\n  apiKey: \"REPLACE_ME\",\n  authScheme: \"Bearer\",\n  // \"nativeGroups\" uses Peach's built-in contact `groups` array.\n  // \"customProperty\" stores the group list inside one custom field instead.\n  groupSyncMode: \"nativeGroups\",\n  groupsField: \"whatsapp_groups\",\n  // \"e164\" (+972501234567) or \"local-il\" (0501234567)\n  phoneFormat: \"e164\",\n  defaultFirstName: \"WhatsApp\",\n  defaultLastNamePrefix: \"Contact\",\n  // set to \"\" to omit email instead of sending a placeholder\n  placeholderEmailDomain: \"whatsapp.invalid\"\n};\n\nfunction formatPhone(raw, format) {\n  if (!raw) return raw;\n  if (format === 'local-il' && raw.startsWith('972')) return '0' + raw.slice(3);\n  if (format === 'e164') return raw.startsWith('+') ? raw : '+' + raw;\n  return raw;\n}\n\nconst rawPhone = $json.rawPhone;\nconst phone = formatPhone(rawPhone, cfg.phoneFormat);\n// Peach's get-contact doc example searched by local-IL format (\"0587701234\"),\n// so the lookup always uses that format regardless of PEACH storage format.\nconst lookupPhone = formatPhone(rawPhone, 'local-il');\nconst firstName = $json.firstName || cfg.defaultFirstName;\nconst lastName = $json.lastName || (cfg.defaultLastNamePrefix + ' ' + rawPhone);\nconst email = cfg.placeholderEmailDomain ? (rawPhone + '@' + cfg.placeholderEmailDomain) : undefined;\n\nreturn {\n  json: {\n    rawPhone,\n    groupLabel: $json.groupLabel,\n    phone,\n    lookupPhone,\n    firstName,\n    lastName,\n    email,\n    peachBaseUrl: cfg.baseUrl,\n    peachApiKey: cfg.apiKey,\n    peachAuthScheme: cfg.authScheme,\n    groupSyncMode: cfg.groupSyncMode,\n    groupsField: cfg.groupsField\n  }\n};"
+      },
+      "id": "sub-config",
+      "name": "Peach Config and derive",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [20, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json.peachBaseUrl}}/getContact",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"phoneNumber\": $json.lookupPhone } }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{$json.peachAuthScheme ? $json.peachAuthScheme + ' ' + $json.peachApiKey : $json.peachApiKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "sub-get-contact",
+      "name": "Get Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 0],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const input = $('Peach Config and derive').item.json;\nconst resp = $json || {};\nconst existing = (resp.contacts && resp.contacts[0]) || null;\n\nlet action, body, contactId;\n\nif (!existing) {\n  action = 'create';\n  body = { firstName: input.firstName, lastName: input.lastName, phone: input.phone };\n  if (input.email) body.email = input.email;\n  if (input.groupSyncMode === 'nativeGroups') {\n    body.groups = [input.groupLabel];\n  } else {\n    body.customProperties = { [input.groupsField]: input.groupLabel };\n  }\n} else {\n  contactId = existing.contactId;\n  if (input.groupSyncMode === 'nativeGroups') {\n    const currentGroups = existing.groups || [];\n    if (currentGroups.includes(input.groupLabel)) {\n      action = 'skip';\n    } else {\n      action = 'update';\n      body = { groups: [input.groupLabel] };\n    }\n  } else {\n    const raw = (existing.customProperties && existing.customProperties[input.groupsField]) || '';\n    const currentGroups = String(raw).split(',').map(s => s.trim()).filter(Boolean);\n    if (currentGroups.includes(input.groupLabel)) {\n      action = 'skip';\n    } else {\n      action = 'update';\n      body = { customProperties: { [input.groupsField]: [...currentGroups, input.groupLabel].join(', ') } };\n    }\n  }\n}\n\nreturn { json: { ...input, action, body, contactId } };"
+      },
+      "id": "sub-decide",
+      "name": "Decide action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is-create",
+              "leftValue": "={{$json.action}}",
+              "rightValue": "create",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "sub-if-create",
+      "name": "Action is create?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [680, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json.peachBaseUrl}}/contacts",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$json.body}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{$json.peachAuthScheme ? $json.peachAuthScheme + ' ' + $json.peachApiKey : $json.peachApiKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "sub-create",
+      "name": "Create Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, -100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is-update",
+              "leftValue": "={{$json.action}}",
+              "rightValue": "update",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "sub-if-update",
+      "name": "Action is update?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [900, 100]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{$json.peachBaseUrl}}/updateContact/{{$json.contactId}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$json.body}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{$json.peachAuthScheme ? $json.peachAuthScheme + ' ' + $json.peachApiKey : $json.peachApiKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "sub-update",
+      "name": "Update Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 0]
+    },
+    {
+      "parameters": {},
+      "id": "sub-skip",
+      "name": "Already in group",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1120, 220]
+    }
+  ],
+  "connections": {
+    "When Called": { "main": [[{ "node": "Peach Config and derive", "type": "main", "index": 0 }]] },
+    "Peach Config and derive": { "main": [[{ "node": "Get Contact", "type": "main", "index": 0 }]] },
+    "Get Contact": { "main": [[{ "node": "Decide action", "type": "main", "index": 0 }]] },
+    "Decide action": { "main": [[{ "node": "Action is create?", "type": "main", "index": 0 }]] },
+    "Action is create?": {
+      "main": [
+        [{ "node": "Create Contact", "type": "main", "index": 0 }],
+        [{ "node": "Action is update?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Action is update?": {
+      "main": [
+        [{ "node": "Update Contact", "type": "main", "index": 0 }],
+        [{ "node": "Already in group", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}
