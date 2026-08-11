@@ -33,16 +33,23 @@ GREEN-API ◀──(polling: getGroupData)── src/groupPoller.js (cron) ─�
 - `src/groupPoller.js` — cron job שמריץ פולינג לכל הקבוצות הרשומות ב-`GREEN_API_WATCHED_GROUPS`.
 - `src/webhookServer.js` — שרת Express שמקבל את ה-webhook מ-GREEN-API.
 
-## הערה חשובה לגבי ה-API של Peach
+## ה-API של Peach שבו נעשה שימוש
 
-הסביבה שבה נבנה הפרויקט הזה חסומה לגישה לרשת אל `peach-organization.gitbook.io` ואל `green-api.com`, כך שלא ניתן היה לאמת מול התיעוד החי את הנתיבים/פרמטרים המדויקים (method, path, שמות שדות query). המימוש מבוסס על מבנה ה-contact שעולה מהתיעוד הציבורי (`firstName`, `lastName`, `email`, `telephone`, `address`, `city`, `street`, `streetNumber`, `aptNumber`, `zipCode`, `contactId`, `groups`, `customProperties`) ואימות Bearer token, אבל **יש לאמת את הפרטים הבאים מול התיעוד לפני ריצה בפרודקשן**:
+לפי התיעוד הרשמי (`https://api.peach-in.com/v4`):
 
-- הנתיב וה-method המדויקים של `create-contact` / `get-contact` / `update-contact`.
-- שם פרמטר החיפוש לפי טלפון ב-`get-contact` (כרגע `telephone`, ניתן לשנות דרך `PEACH_PHONE_QUERY_PARAM`).
-- method לעדכון (`PATCH` לעומת `PUT`).
-- פורמט מספר הטלפון שה-CRM מצפה לו (כרגע `+972501234567`, ניתן לשנות ל-`0501234567` דרך `PEACH_PHONE_FORMAT=local-il`).
+| פעולה | Method | נתיב | שדה טלפון בבקשה |
+|---|---|---|---|
+| חיפוש איש קשר | `POST` | `/getContact` | `phoneNumber` |
+| יצירת איש קשר | `POST` | `/contacts` | `phone` |
+| עדכון איש קשר | `PUT` | `/updateContact/{contactId}` | `phone` |
 
-כל הנקודות האלה מרוכזות ב-`src/peachClient.js` ו-`src/phone.js` כדי שהתאמה תהיה שינוי במקום אחד.
+שימו לב לחוסר העקביות בין האנדפוינטים עצמם: ב-`getContact` שדה הטלפון בבקשה נקרא `phoneNumber`, ב-`contacts`/`updateContact` הוא `phone`, ובתשובה (אובייקט ה-contact) הוא `telephone`. זה טופל ב-`src/peachClient.js` כך שבשאר הקוד עובדים תמיד עם אותו rawPhone.
+
+**זיהוי חברי קבוצה כ"קבוצה" ב-Peach:** ל-Peach יש מנגנון native לתיוג אנשי קשר בקבוצות בשם (`groups: ["VIP", "Newsletter"]` בדוגמת התיעוד), עם הוספה אדיטיבית דרך `groups` והסרה דרך `removeGroups` ב-update. זה בדיוק אותו קונספט שביקשתם ("שדה ייעודי שאומר באיזו קבוצת וואטסאפ איש הקשר נמצא"), ולכן זה ברירת המחדל (`PEACH_GROUP_SYNC_MODE=nativeGroups`) — אין race condition של קריאה-מיזוג-כתיבה, Peach מטפל בהוספה בעצמו. אם אתם מעדיפים דווקא שדה custom property נפרד (כי `groups` כבר משמש אתכם למשהו אחר בעסק), אפשר לעבור למצב `customProperty` ב-`.env` ואז לציין את מפתח השדה ב-`PEACH_WHATSAPP_GROUPS_FIELD`.
+
+**שדות חובה ב-create-contact:** התיעוד מסמן `firstName`, `lastName` ו-`email` בכוכבית (חובה), אבל מוואטסאפ בדרך כלל יש רק מספר טלפון. הקוד ממלא ברירות מחדל (`PEACH_DEFAULT_FIRST_NAME`, `PEACH_DEFAULT_LAST_NAME_PREFIX`, ואימייל מזויף לפי `PEACH_PLACEHOLDER_EMAIL_DOMAIN`) — אפשר לכוונן או לנטרל את מייל ברירת המחדל (`PEACH_PLACEHOLDER_EMAIL_DOMAIN=""`) לאחר שמוודאים בפועל אם השדה אכן נאכף כחובה.
+
+**סכמת ה-Authorization** לא מפורטת באופן מדויק בעמוד עצמו ("Include your API key in the Authorization header"); ברירת המחדל היא `Authorization: Bearer <key>` (`PEACH_AUTH_SCHEME=Bearer`) — אם מתקבל 401, נסו `PEACH_AUTH_SCHEME=""` לשליחת המפתח הגולמי בלי prefix.
 
 ## התקנה
 
@@ -62,6 +69,8 @@ npm start
 npm run sync-now
 ```
 
-## שדה ה-CRM
+## תיוג הקבוצה על איש הקשר
 
-צרו ב-Peach שדה מותאם אישית (custom field) חדש לאנשי קשר, ורשמו את המפתח שלו (ה-`key`, לא הכותרת המוצגת) בתוך `PEACH_WHATSAPP_GROUPS_FIELD`. הערך שיישמר הוא רשימת שמות הקבוצות (מהתווית ב-`GREEN_API_WATCHED_GROUPS`) שאיש הקשר חבר בהן, מופרדות בפסיק.
+במצב ברירת המחדל (`nativeGroups`) אין צורך בהגדרה נוספת ב-Peach — כל תווית קבוצה מ-`GREEN_API_WATCHED_GROUPS` (למשל "VIP Customers") נשלחת כפי שהיא לתוך `groups` של איש הקשר.
+
+אם עוברים למצב `customProperty`, צרו קודם ב-Peach שדה מותאם אישית (custom field) לאנשי קשר, ורשמו את המפתח שלו (ה-`key`, לא הכותרת המוצגת) בתוך `PEACH_WHATSAPP_GROUPS_FIELD`. הערך שיישמר יהיה רשימת שמות הקבוצות, מופרדות בפסיק.
