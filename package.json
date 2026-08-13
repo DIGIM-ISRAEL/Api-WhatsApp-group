@@ -4,6 +4,9 @@
   "description": "Syncs WhatsApp group members (via GREEN-API) into Peach CRM contacts, tagging each contact with the WhatsApp group(s) they belong to.",
   "main": "src/index.js",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",

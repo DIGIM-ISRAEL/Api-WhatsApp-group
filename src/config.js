@@ -27,6 +27,12 @@ const config = {
     sharedSecret: process.env.WEBHOOK_SHARED_SECRET || "",
     port: Number(process.env.PORT || 3000),
   },
+  // Where groups-state.json lives. On platforms with an ephemeral
+  // filesystem (e.g. Railway without a mounted Volume), this file is lost
+  // on every redeploy/restart, which just means the next poll re-treats
+  // existing group members as "new" - harmless but wasteful. Point this at
+  // a mounted volume's path in production.
+  dataDir: process.env.DATA_DIR || require("path").join(__dirname, "..", "data"),
   peach: {
     baseUrl: process.env.PEACH_API_BASE_URL || "https://api.peach-in.com/v4",
     apiKey: process.env.PEACH_API_KEY,

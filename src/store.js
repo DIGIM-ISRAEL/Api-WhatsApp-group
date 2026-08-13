@@ -1,7 +1,8 @@
 const fs = require("fs");
 const path = require("path");
+const config = require("./config");
 
-const DATA_FILE = path.join(__dirname, "..", "data", "groups-state.json");
+const DATA_FILE = path.join(config.dataDir, "groups-state.json");
 
 function readAll() {
   try {

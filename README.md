@@ -73,6 +73,38 @@ npm start
 npm run sync-now
 ```
 
+## פריסה ל-Railway
+
+זה תהליך שאתם מבצעים בדשבורד של Railway — אין צורך להעביר שום מפתח/טוקן בצ'אט הזה.
+
+1. **New Project → Deploy from GitHub repo**, בחרו את `digim-israel/api-whatsapp-group` וענף `claude/peach-whatsapp-webhook-xsnzgz` (או `main` אחרי מיזוג). Railway מזהה Node.js אוטומטית (`npm install` + `npm start`, מוגדר ב-`package.json`) — אין צורך בהגדרות build נוספות.
+2. **הוסיפו Volume:** בהגדרות ה-service → **Volumes → New Volume**, mount path: `/app/data`. זה קריטי — בלי Volume, ה-state (מי כבר נסרק בכל קבוצה) נמחק בכל דיפלוי, וכל restart יגרום ל"גילוי מחדש" של כל חברי הקבוצה כאילו הם חדשים.
+3. **משתני סביבה:** ב-Service → **Variables → Raw Editor**, הדביקו והשלימו:
+
+   ```
+   GREEN_API_ID_INSTANCE=
+   GREEN_API_TOKEN_INSTANCE=
+   GREEN_API_BASE_URL=https://api.greenapi.com
+   GREEN_API_WATCHED_GROUPS=120363012345678901@g.us:שם קבוצה לדוגמה
+   GROUP_POLL_INTERVAL_MINUTES=10
+   WEBHOOK_SHARED_SECRET=
+   DATA_DIR=/app/data
+   PEACH_API_BASE_URL=https://api.peach-in.com/v4
+   PEACH_API_KEY=
+   PEACH_AUTH_SCHEME=Bearer
+   PEACH_GROUP_SYNC_MODE=nativeGroups
+   PEACH_WHATSAPP_GROUPS_FIELD=whatsapp_groups
+   PEACH_PHONE_FORMAT=e164
+   PEACH_DEFAULT_FIRST_NAME=WhatsApp
+   PEACH_DEFAULT_LAST_NAME_PREFIX=Contact
+   PEACH_PLACEHOLDER_EMAIL_DOMAIN=whatsapp.invalid
+   ```
+
+   `PORT` לא צריך להגדיר — Railway מזריק אותו אוטומטית וה-קוד כבר קורא אותו (`process.env.PORT`).
+4. **Generate Domain** (Settings → Networking) כדי לקבל URL ציבורי, למשל `https://xxx.up.railway.app`.
+5. **חברו ל-GREEN-API:** בקונסולה של GREEN-API, הגדירו Webhook URL = `https://xxx.up.railway.app/webhooks/green-api` (עם `?token=...` בסוף אם מילאתם `WEBHOOK_SHARED_SECRET`), ווודאו ש-`incomingMessageReceived` מסומן ב-notifications.
+6. **בדיקת חיות:** `GET https://xxx.up.railway.app/health` אמור להחזיר `{"ok":true}`.
+
 ## תיוג הקבוצה על איש הקשר
 
 במצב ברירת המחדל (`nativeGroups`) אין צורך בהגדרה נוספת ב-Peach — כל תווית קבוצה מ-`GREEN_API_WATCHED_GROUPS` (למשל "VIP Customers") נשלחת כפי שהיא לתוך `groups` של איש הקשר.
