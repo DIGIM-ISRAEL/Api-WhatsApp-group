@@ -14,9 +14,21 @@ const client = axios.create({
 });
 
 // POST /getContact { phoneNumber } -> { contacts: [...] }
+// Peach responds with an HTTP 400 (message: "contactNotFound") instead of a
+// 200 with an empty array when no contact matches - that's a normal "not
+// found" here, not an error, so it's translated to null instead of thrown.
 async function findContactByPhone(phoneNumber) {
-  const { data } = await client.post("/getContact", { phoneNumber });
-  return data?.contacts?.[0] || null;
+  try {
+    const { data } = await client.post("/getContact", { phoneNumber });
+    return data?.contacts?.[0] || null;
+  } catch (err) {
+    const errData = err.response?.data;
+    const isNotFound =
+      errData?.message === "contactNotFound" ||
+      (Array.isArray(errData?.errors) && errData.errors.includes("contact not found"));
+    if (isNotFound) return null;
+    throw err;
+  }
 }
 
 // POST /contacts -> { contactBody, contactId, failedCustomProperties }

@@ -55,6 +55,8 @@ GREEN-API ◀──(polling: getGroupData)── src/groupPoller.js (cron) ─�
 
 **סכמת ה-Authorization** לא מפורטת באופן מדויק בעמוד עצמו ("Include your API key in the Authorization header"); ברירת המחדל היא `Authorization: Bearer <key>` (`PEACH_AUTH_SCHEME=Bearer`) — אם מתקבל 401, נסו `PEACH_AUTH_SCHEME=""` לשליחת המפתח הגולמי בלי prefix.
 
+**מאומת בפועל (מבדיקה אמיתית מול production):** `POST /getContact` לא מחזיר `200` עם `contacts: []` כשלא נמצא איש קשר, כפי שהתיעוד רומז — הוא מחזיר **`400`** עם `{"message":"contactNotFound","code":400,"errors":["contact not found"]}`. זה טופל ב-`src/peachClient.js` (תופסים את השגיאה הספציפית הזו ומתייחסים אליה כ"לא נמצא", לא כתקלה) — בלי התיקון הזה, כל מספר טלפון שעדיין לא קיים ב-Peach היה נכשל במקום להיווצר כאיש קשר חדש.
+
 ## התקנה
 
 ```bash
