@@ -4,6 +4,7 @@ const logger = require("./logger");
 
 const client = axios.create({
   baseURL: config.peach.baseUrl,
+  timeout: config.httpTimeoutMs,
   headers: {
     Authorization: config.peach.authScheme
       ? `${config.peach.authScheme} ${config.peach.apiKey}`

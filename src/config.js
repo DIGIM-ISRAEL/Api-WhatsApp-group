@@ -27,6 +27,9 @@ const config = {
     sharedSecret: process.env.WEBHOOK_SHARED_SECRET || "",
     port: Number(process.env.PORT || 3000),
   },
+  // All outbound HTTP calls (GREEN-API, Peach) abort after this long instead
+  // of hanging indefinitely - axios has no default timeout on its own.
+  httpTimeoutMs: Number(process.env.HTTP_TIMEOUT_MS || 20000),
   // Where groups-state.json lives. On platforms with an ephemeral
   // filesystem (e.g. Railway without a mounted Volume), this file is lost
   // on every redeploy/restart, which just means the next poll re-treats
