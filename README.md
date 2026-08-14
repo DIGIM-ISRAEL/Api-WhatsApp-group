@@ -105,6 +105,56 @@ npm run sync-now
 5. **חברו ל-GREEN-API:** בקונסולה של GREEN-API, הגדירו Webhook URL = `https://xxx.up.railway.app/webhooks/green-api` (עם `?token=...` בסוף אם מילאתם `WEBHOOK_SHARED_SECRET`), ווודאו ש-`incomingMessageReceived` מסומן ב-notifications.
 6. **בדיקת חיות:** `GET https://xxx.up.railway.app/health` אמור להחזיר `{"ok":true}`.
 
+## בדיקת קצה לקצה (כולל השמירה ב-Peach)
+
+שלושה דברים נפרדים לבדוק — מומלץ בסדר הזה:
+
+### 1. הפולינג רץ בכלל?
+
+הפולינג רץ פעם **אחת מיד עם עליית השרת** (לפני שמחכים למחזור הבא) — כלומר כל שמירת env var/redeploy ב-Railway היא הזדמנות בדיקה בחינם. פתחו **Railway → ה-service → Deployments → הדפלוי הפעיל → View Logs**, ותחפשו שורות כמו:
+
+```
+INFO Starting group poller: every 10 minute(s) for 2 group(s)
+INFO Group "הלכה יומית בכלכלה יהודית 1": 5 new member(s) synced to Peach
+```
+
+**שימו לב:** בהרצה הראשונה **כל** החברים הקיימים בקבוצה ייחשבו "חדשים" וייכתבו ל-Peach בבת אחת — זו התנהגות צפויה (baseline sync), לא תקלה.
+
+### 2. הפעלה ידנית בלי לחכות (מומלץ לבדיקה)
+
+הוספתי endpoint לבדיקה ידנית שמריץ את אותו סנכרון על פי דרישה, ומחזיר סיכום מה קרה לכל חבר (נוצר/עודכן/כבר קיים/שגיאה):
+
+```bash
+curl -X POST "https://xxx.up.railway.app/admin/sync-now?token=<WEBHOOK_SHARED_SECRET שלכם, אם הגדרתם>"
+```
+
+(אפשר להריץ את זה גם ישירות מהדפדפן דרך [reqbin.com](https://reqbin.com) או כלי דומה אם אין לכם טרמינל בהישג יד — רק לוודא שבוחרים בקשת POST, לא GET.) התשובה תיראה בערך כך:
+
+```json
+{
+  "ok": true,
+  "groups": [
+    { "chatId": "120363265817110147@g.us", "label": "הלכה יומית בכלכלה יהודית 1",
+      "memberCount": 42, "newMemberCount": 2,
+      "results": [
+        { "rawPhone": "972501234567", "action": "created" },
+        { "rawPhone": "972529876543", "action": "updated" }
+      ]
+    }
+  ]
+}
+```
+
+`action` יכול להיות `created` (נוצר איש קשר חדש), `updated` (התווספה קבוצה לאיש קשר קיים), `unchanged` (כבר היה מתויג), או `error` (עם פרטי השגיאה מ-Peach — הכי שימושי אם דברים לא עובדים).
+
+### 3. הבדיקה בזמן אמת (webhook)
+
+הוסיפו מספר טסט לקבוצה מנוטרת, בקשו ממנו לשלוח הודעה, ותוך שניות בודקים שוב את ה-Logs — אמורה להופיע שורה כמו `Updated Peach contact ... : added to group "..."`.
+
+### 4. אימות בפועל בתוך Peach
+
+פותחים את Peach, מחפשים לפי הטלפון של איש הקשר שבדקתם, ומוודאים שהקבוצה מופיעה בשדה `groups` שלו. **זו הבדיקה הקובעת** — אם הלוגים ב-Railway מראים `"action": "created"` אבל בפועל אין איש קשר ב-Peach, כנראה יש בעיה בפרטי ה-API (Authorization scheme, או אחד השדות שסימנו בתיעוד ככוכבית/חובה) — תסתכלו על הודעת השגיאה שמופיעה תחת `"action": "error"` בתשובת ה-`sync-now`, היא בדרך כלל מצביעה ישירות על הבעיה.
+
 ## תיוג הקבוצה על איש הקשר
 
 במצב ברירת המחדל (`nativeGroups`) אין צורך בהגדרה נוספת ב-Peach — כל תווית קבוצה מ-`GREEN_API_WATCHED_GROUPS` (למשל "VIP Customers") נשלחת כפי שהיא לתוך `groups` של איש הקשר.

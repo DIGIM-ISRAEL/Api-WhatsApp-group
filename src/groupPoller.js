@@ -19,6 +19,7 @@ async function syncGroup({ chatId, label }) {
   const known = new Set(store.getKnownMembers(chatId));
   const newMembers = currentMembers.filter((id) => !known.has(id));
 
+  const results = [];
   for (const memberChatId of newMembers) {
     const rawPhone = phoneFromChatId(memberChatId);
     if (!rawPhone) continue;
@@ -33,9 +34,12 @@ async function syncGroup({ chatId, label }) {
     }
 
     try {
-      await upsertContactInGroup({ rawPhone, groupLabel: label, firstName, lastName });
+      const { action } = await upsertContactInGroup({ rawPhone, groupLabel: label, firstName, lastName });
+      results.push({ rawPhone, action });
     } catch (err) {
-      logger.error(`Failed to sync ${rawPhone} into "${label}"`, err.response?.data || err.message);
+      const errorMessage = err.response?.data || err.message;
+      logger.error(`Failed to sync ${rawPhone} into "${label}"`, errorMessage);
+      results.push({ rawPhone, action: "error", error: errorMessage });
     }
   }
 
@@ -43,16 +47,22 @@ async function syncGroup({ chatId, label }) {
   if (newMembers.length) {
     logger.info(`Group "${label}": ${newMembers.length} new member(s) synced to Peach`);
   }
+
+  return { chatId, label, memberCount: currentMembers.length, newMemberCount: newMembers.length, results };
 }
 
 async function syncAllGroups() {
+  const summaries = [];
   for (const group of config.greenApi.watchedGroups) {
     try {
-      await syncGroup(group);
+      summaries.push(await syncGroup(group));
     } catch (err) {
-      logger.error(`Failed to poll group ${group.chatId}`, err.response?.data || err.message);
+      const errorMessage = err.response?.data || err.message;
+      logger.error(`Failed to poll group ${group.chatId}`, errorMessage);
+      summaries.push({ chatId: group.chatId, label: group.label, error: errorMessage });
     }
   }
+  return summaries;
 }
 
 function startPolling() {

@@ -4,6 +4,7 @@ const store = require("./store");
 const logger = require("./logger");
 const { phoneFromChatId } = require("./phone");
 const { upsertContactInGroup } = require("./contactSync");
+const { syncAllGroups } = require("./groupPoller");
 
 function findWatchedGroup(chatId) {
   return config.greenApi.watchedGroups.find((g) => g.chatId === chatId);
@@ -71,6 +72,22 @@ function createServer() {
   });
 
   app.get("/health", (_req, res) => res.json({ ok: true }));
+
+  // Manually triggers the same reconciliation the poller runs on a schedule -
+  // for testing end-to-end without waiting for the interval. Protected by
+  // WEBHOOK_SHARED_SECRET the same way the webhook route is.
+  app.post("/admin/sync-now", async (req, res) => {
+    if (config.webhook.sharedSecret && req.query.token !== config.webhook.sharedSecret) {
+      return res.status(401).send("unauthorized");
+    }
+    try {
+      const summaries = await syncAllGroups();
+      res.json({ ok: true, groups: summaries });
+    } catch (err) {
+      logger.error("Manual sync-now failed", err);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
 
   return app;
 }
