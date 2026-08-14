@@ -29,7 +29,10 @@ async function handleIncomingMessage(body) {
   if (known.has(senderData.sender)) return;
 
   const rawPhone = phoneFromChatId(senderData.sender);
-  if (!rawPhone) return;
+  if (!rawPhone) {
+    logger.warn(`Skipping webhook sender ${senderData.sender}: not a plain phone id`);
+    return;
+  }
 
   const displayName = senderData.senderName || senderData.senderContactName;
   let firstName;

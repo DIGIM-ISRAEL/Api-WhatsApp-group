@@ -28,7 +28,11 @@ async function syncGroup({ chatId, label }) {
   for (const memberChatId of newMembers) {
     processed += 1;
     const rawPhone = phoneFromChatId(memberChatId);
-    if (!rawPhone) continue;
+    if (!rawPhone) {
+      logger.warn(`  [${processed}/${newMembers.length}] "${label}" ${memberChatId}: skipped, not a plain phone id`);
+      results.push({ rawPhone: memberChatId, action: "skipped-unparseable-id" });
+      continue;
+    }
 
     let firstName;
     let lastName;
