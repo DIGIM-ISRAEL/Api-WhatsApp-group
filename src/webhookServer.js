@@ -53,6 +53,8 @@ function createServer() {
   const app = express();
   app.use(express.json());
 
+  let lastSync = { status: "idle" };
+
   app.post("/webhooks/green-api", async (req, res) => {
     if (config.webhook.sharedSecret && req.query.token !== config.webhook.sharedSecret) {
       return res.status(401).send("unauthorized");
@@ -76,17 +78,38 @@ function createServer() {
   // Manually triggers the same reconciliation the poller runs on a schedule -
   // for testing end-to-end without waiting for the interval. Protected by
   // WEBHOOK_SHARED_SECRET the same way the webhook route is.
+  //
+  // Runs in the background instead of blocking the response: a first sync
+  // against an existing group can mean hundreds of sequential Peach/GREEN-API
+  // calls, which can take much longer than an HTTP client (or a platform
+  // proxy) is willing to wait on a single request. Watch server logs (or
+  // GET /admin/sync-status) for progress and the final per-member result.
   app.post("/admin/sync-now", async (req, res) => {
     if (config.webhook.sharedSecret && req.query.token !== config.webhook.sharedSecret) {
       return res.status(401).send("unauthorized");
     }
+    if (lastSync.status === "running") {
+      return res.status(409).json({ ok: false, error: "a sync is already running, check /admin/sync-status" });
+    }
+
+    lastSync = { status: "running", startedAt: new Date().toISOString(), groups: null };
+    res.status(202).json({ ok: true, status: "started", note: "check server logs or GET /admin/sync-status for progress" });
+
     try {
       const summaries = await syncAllGroups();
-      res.json({ ok: true, groups: summaries });
+      lastSync = { status: "done", startedAt: lastSync.startedAt, finishedAt: new Date().toISOString(), groups: summaries };
+      logger.info("Manual sync-now finished");
     } catch (err) {
+      lastSync = { status: "error", startedAt: lastSync.startedAt, finishedAt: new Date().toISOString(), error: err.message };
       logger.error("Manual sync-now failed", err);
-      res.status(500).json({ ok: false, error: err.message });
     }
+  });
+
+  app.get("/admin/sync-status", (req, res) => {
+    if (config.webhook.sharedSecret && req.query.token !== config.webhook.sharedSecret) {
+      return res.status(401).send("unauthorized");
+    }
+    res.json(lastSync);
   });
 
   return app;

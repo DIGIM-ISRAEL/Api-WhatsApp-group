@@ -19,8 +19,14 @@ async function syncGroup({ chatId, label }) {
   const known = new Set(store.getKnownMembers(chatId));
   const newMembers = currentMembers.filter((id) => !known.has(id));
 
+  if (newMembers.length) {
+    logger.info(`Group "${label}": found ${newMembers.length} new member(s) out of ${currentMembers.length} total, syncing to Peach one by one...`);
+  }
+
   const results = [];
+  let processed = 0;
   for (const memberChatId of newMembers) {
+    processed += 1;
     const rawPhone = phoneFromChatId(memberChatId);
     if (!rawPhone) continue;
 
@@ -36,16 +42,17 @@ async function syncGroup({ chatId, label }) {
     try {
       const { action } = await upsertContactInGroup({ rawPhone, groupLabel: label, firstName, lastName });
       results.push({ rawPhone, action });
+      logger.info(`  [${processed}/${newMembers.length}] "${label}" ${rawPhone}: ${action}`);
     } catch (err) {
       const errorMessage = err.response?.data || err.message;
-      logger.error(`Failed to sync ${rawPhone} into "${label}"`, errorMessage);
+      logger.error(`  [${processed}/${newMembers.length}] "${label}" ${rawPhone}: FAILED`, errorMessage);
       results.push({ rawPhone, action: "error", error: errorMessage });
     }
   }
 
   store.setKnownMembers(chatId, currentMembers);
   if (newMembers.length) {
-    logger.info(`Group "${label}": ${newMembers.length} new member(s) synced to Peach`);
+    logger.info(`Group "${label}": done, ${newMembers.length} member(s) processed`);
   }
 
   return { chatId, label, memberCount: currentMembers.length, newMemberCount: newMembers.length, results };
