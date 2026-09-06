@@ -1,6 +1,7 @@
 const config = require("./config");
 const peach = require("./peachClient");
 const logger = require("./logger");
+const eventsLog = require("./eventsLog");
 const { formatPhone } = require("./phone");
 
 function parseGroupsField(value) {
@@ -41,6 +42,7 @@ async function upsertContactInGroup({ rawPhone, groupLabel, firstName, lastName,
       ? { groups: [groupLabel] }
       : { customProperties: { [config.peach.groupsField]: groupLabel } };
 
+  let result;
   if (!existing) {
     const created = await peach.createContact({
       firstName: names.firstName,
@@ -50,30 +52,33 @@ async function upsertContactInGroup({ rawPhone, groupLabel, firstName, lastName,
       ...groupPayload,
     });
     logger.info(`Created Peach contact ${created?.contactId || ""} for ${phone} in group "${groupLabel}"`);
-    return { action: "created", contact: created };
-  }
-
-  if (config.peach.groupSyncMode === "nativeGroups") {
+    result = { action: "created", contact: created };
+  } else if (config.peach.groupSyncMode === "nativeGroups") {
     if ((existing.groups || []).includes(groupLabel)) {
       logger.info(`Contact ${existing.contactId} already in group "${groupLabel}", skipping`);
-      return { action: "unchanged", contact: existing };
+      result = { action: "unchanged", contact: existing };
+    } else {
+      const updated = await peach.updateContact(existing.contactId, { groups: [groupLabel] });
+      logger.info(`Updated Peach contact ${existing.contactId}: added to group "${groupLabel}"`);
+      result = { action: "updated", contact: updated };
     }
-    const updated = await peach.updateContact(existing.contactId, { groups: [groupLabel] });
-    logger.info(`Updated Peach contact ${existing.contactId}: added to group "${groupLabel}"`);
-    return { action: "updated", contact: updated };
+  } else {
+    const fieldKey = config.peach.groupsField;
+    const currentGroups = parseGroupsField(existing.customProperties?.[fieldKey]);
+    if (currentGroups.includes(groupLabel)) {
+      logger.info(`Contact ${existing.contactId} already tagged with "${groupLabel}", skipping`);
+      result = { action: "unchanged", contact: existing };
+    } else {
+      const updated = await peach.updateContact(existing.contactId, {
+        customProperties: { [fieldKey]: [...currentGroups, groupLabel].join(", ") },
+      });
+      logger.info(`Updated Peach contact ${existing.contactId}: added group "${groupLabel}" to custom field`);
+      result = { action: "updated", contact: updated };
+    }
   }
 
-  const fieldKey = config.peach.groupsField;
-  const currentGroups = parseGroupsField(existing.customProperties?.[fieldKey]);
-  if (currentGroups.includes(groupLabel)) {
-    logger.info(`Contact ${existing.contactId} already tagged with "${groupLabel}", skipping`);
-    return { action: "unchanged", contact: existing };
-  }
-  const updated = await peach.updateContact(existing.contactId, {
-    customProperties: { [fieldKey]: [...currentGroups, groupLabel].join(", ") },
-  });
-  logger.info(`Updated Peach contact ${existing.contactId}: added group "${groupLabel}" to custom field`);
-  return { action: "updated", contact: updated };
+  eventsLog.record({ rawPhone, groupLabel, action: result.action });
+  return result;
 }
 
 module.exports = { upsertContactInGroup };
