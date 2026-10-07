@@ -3,6 +3,7 @@ const peach = require("./peachClient");
 const logger = require("./logger");
 const eventsLog = require("./eventsLog");
 const { formatPhone } = require("./phone");
+const { notifyIfUnaffiliated } = require("./teacherNotify");
 
 function parseGroupsField(value) {
   if (!value) return [];
@@ -32,7 +33,7 @@ function resolveEmail(rawPhone, email) {
  * it's already tagged with (a contact can be in more than one watched
  * WhatsApp group).
  */
-async function upsertContactInGroup({ rawPhone, groupLabel, firstName, lastName, email }) {
+async function upsertContactInGroup({ rawPhone, groupLabel, groupChatId, notify = false, firstName, lastName, email }) {
   const phone = formatPhone(rawPhone);
   const names = resolveNames(rawPhone, firstName, lastName);
   const existing = await peach.findContactByPhone(phone);
@@ -78,6 +79,16 @@ async function upsertContactInGroup({ rawPhone, groupLabel, firstName, lastName,
   }
 
   eventsLog.record({ rawPhone, groupLabel, action: result.action });
+
+  if (notify && groupChatId && groupChatId === config.teacherNotify.groupId) {
+    try {
+      // `existing` is the contact as it was before this run; fall back to
+      // what Peach returned when we just created it.
+      await notifyIfUnaffiliated({ rawPhone, contact: existing || result.contact, firstName, lastName });
+    } catch (err) {
+      logger.error(`Teacher notification failed for ${rawPhone}`, err.response?.data || err.message);
+    }
+  }
   return result;
 }
 

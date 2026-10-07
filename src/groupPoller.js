@@ -44,7 +44,15 @@ async function syncGroup({ chatId, label }) {
     }
 
     try {
-      const { action } = await upsertContactInGroup({ rawPhone, groupLabel: label, firstName, lastName });
+      const { action } = await upsertContactInGroup({
+        rawPhone,
+        groupLabel: label,
+        groupChatId: chatId,
+        // First run for a group is a baseline of existing members - don't email for those.
+        notify: known.size > 0,
+        firstName,
+        lastName,
+      });
       results.push({ rawPhone, action });
       logger.info(`  [${processed}/${newMembers.length}] "${label}" ${rawPhone}: ${action}`);
     } catch (err) {

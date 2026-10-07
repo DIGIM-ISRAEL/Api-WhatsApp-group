@@ -36,6 +36,27 @@ const config = {
   // existing group members as "new" - harmless but wasteful. Point this at
   // a mounted volume's path in production.
   dataDir: process.env.DATA_DIR || require("path").join(__dirname, "..", "data"),
+  // Teacher-join notification: when someone joins `teachersGroupId`, check
+  // whether their Peach contact is linked to an education institution and,
+  // if not, email the secretary.
+  teacherNotify: {
+    groupId: process.env.TEACHERS_GROUP_ID || "",
+    secretaryEmail: process.env.SECRETARY_EMAIL || "",
+    // Path (dot-separated) on the Peach contact object holding the links to
+    // institutions - see README. Value may be an array or a single value.
+    linkField: process.env.PEACH_INSTITUTION_LINK_FIELD || "",
+    // If the linked entries are objects carrying `groups`, require this
+    // group among them (e.g. "מוסדות חינוך"). Empty = any link counts.
+    institutionGroup: process.env.PEACH_INSTITUTION_GROUP || "מוסדות חינוך",
+  },
+  smtp: {
+    host: process.env.SMTP_HOST || "",
+    port: Number(process.env.SMTP_PORT || 587),
+    secure: process.env.SMTP_SECURE === "true",
+    user: process.env.SMTP_USER || "",
+    pass: process.env.SMTP_PASS || "",
+    from: process.env.SMTP_FROM || process.env.SMTP_USER || "",
+  },
   peach: {
     baseUrl: process.env.PEACH_API_BASE_URL || "https://api.peach-in.com/v4",
     apiKey: process.env.PEACH_API_KEY,

@@ -26,4 +26,10 @@ async function getContactInfo(chatId) {
   }
 }
 
-module.exports = { getGroupData, getContactInfo };
+// Lists every group the instance's phone is in, with its chatId (…@g.us) and name.
+async function listGroups() {
+  const { data } = await client.get(url("getContacts"));
+  return (data || []).filter((c) => c.id?.endsWith("@g.us")).map((c) => ({ id: c.id, name: c.name }));
+}
+
+module.exports = { getGroupData, getContactInfo, listGroups };

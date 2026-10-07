@@ -6,6 +6,9 @@ const eventsLog = require("./eventsLog");
 const { phoneFromChatId } = require("./phone");
 const { upsertContactInGroup } = require("./contactSync");
 const { syncAllGroups } = require("./groupPoller");
+const greenApi = require("./greenApiClient");
+const peach = require("./peachClient");
+const { checkInstitution } = require("./teacherNotify");
 
 function findWatchedGroup(chatId) {
   return config.greenApi.watchedGroups.find((g) => g.chatId === chatId);
@@ -52,7 +55,7 @@ async function handleIncomingMessage(body) {
   }
 
   try {
-    await upsertContactInGroup({ rawPhone, groupLabel: group.label, firstName, lastName });
+    await upsertContactInGroup({ rawPhone, groupLabel: group.label, groupChatId: group.chatId, notify: known.size > 0, firstName, lastName });
     known.add(senderData.sender);
     store.setKnownMembers(group.chatId, [...known]);
   } catch (err) {
@@ -119,6 +122,40 @@ function createServer() {
   // history log of what happened before it existed.
   app.get("/admin/history", requireToken, (req, res) => {
     res.json({ byDate: eventsLog.getStatsByDay({ groupLabel: req.query.group }) });
+  });
+
+  // Lists all WhatsApp groups of the instance with their chatId - use it to
+  // find the id of "כלכלה ויהדות במערכת החינוך".
+  app.get("/admin/groups", requireToken, async (req, res) => {
+    try {
+      const groups = await greenApi.listGroups();
+      const q = req.query.q;
+      res.json(q ? groups.filter((g) => g.name?.includes(q)) : groups);
+    } catch (err) {
+      res.status(502).json({ error: err.response?.data || err.message });
+    }
+  });
+
+  // Dumps the raw Peach contact for a phone plus the institution verdict, to
+  // discover/verify how institutions are linked (see PEACH_INSTITUTION_LINK_FIELD).
+  app.get("/admin/peach-contact", requireToken, async (req, res) => {
+    try {
+      const contact = await peach.findContactByPhone(req.query.phone);
+      res.json({ contact, institution: contact ? checkInstitution(contact) : null });
+    } catch (err) {
+      res.status(502).json({ error: err.response?.data || err.message });
+    }
+  });
+
+  // Sends the secretary email with fake details to verify SMTP end to end.
+  app.post("/admin/test-mail", requireToken, async (req, res) => {
+    try {
+      const { sendSecretaryMail } = require("./teacherNotify");
+      await sendSecretaryMail({ name: "בדיקה", phone: "+972500000000" });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   return app;
