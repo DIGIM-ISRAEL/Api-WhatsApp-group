@@ -197,4 +197,4 @@ curl "https://xxx.up.railway.app/admin/history?group=הלכה יומית בכל�
 
 1. **מציאת ה-ID של הקבוצה:** `GET /admin/groups?q=כלכלה` מחזיר את כל הקבוצות של המכשיר עם `id` (בפורמט `…@g.us`). שימו אותו ב-`TEACHERS_GROUP_ID` **וגם** ב-`GREEN_API_WATCHED_GROUPS`.
 2. **SMTP:** מלאו `SMTP_*` ובדקו עם `POST /admin/test-mail`.
-3. **זיהוי שיוך למוסד:** מבנה הקישור מוסד↔איש קשר ב-Peach לא ידוע לנו מהתיעוד, לכן הוא מוגדר ב-`PEACH_INSTITUTION_LINK_FIELD` (נתיב בנקודות בתוך אובייקט ה-contact). הריצו `GET /admin/peach-contact?phone=+972...` על מורה ששויך למוסד, ראו באיזה שדה הקישור מופיע, והגדירו אותו. כל עוד לא הוגדר — לא נשלחים מיילים (כדי לא להציף במיילי שווא).
+3. **זיהוי שיוך למוסד:** `getContact` מחזיר לכל איש קשר מערך `groups`. איש קשר נחשב משויך למוסד אם יש ב-`groups` שלו קבוצת מוסד. מגדירים איך מזהים אותה באחד מ-`PEACH_INSTITUTION_GROUPS` (רשימת שמות מפורשת) או `PEACH_INSTITUTION_GROUP_PREFIX` (תחילית שם). בלי הגדרה, כל קבוצה שאינה קבוצת וואטסאפ מנוטרת נחשבת מוסד (אפשר להחריג עם `PEACH_IGNORED_GROUPS`). לבדיקה: `GET /admin/peach-contact?phone=+972...` מחזיר את איש הקשר ואת ההכרעה.

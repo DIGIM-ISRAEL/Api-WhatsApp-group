@@ -42,12 +42,14 @@ const config = {
   teacherNotify: {
     groupId: process.env.TEACHERS_GROUP_ID || "",
     secretaryEmail: process.env.SECRETARY_EMAIL || "",
-    // Path (dot-separated) on the Peach contact object holding the links to
-    // institutions - see README. Value may be an array or a single value.
-    linkField: process.env.PEACH_INSTITUTION_LINK_FIELD || "",
-    // If the linked entries are objects carrying `groups`, require this
-    // group among them (e.g. "מוסדות חינוך"). Empty = any link counts.
-    institutionGroup: process.env.PEACH_INSTITUTION_GROUP || "מוסדות חינוך",
+    // How to recognise an institution among a contact's Peach `groups`:
+    // - PEACH_INSTITUTION_GROUPS: explicit comma-separated group names, or
+    // - PEACH_INSTITUTION_GROUP_PREFIX: group names starting with this text, or
+    // - neither: any group that isn't one of the watched WhatsApp group labels
+    //   (or in PEACH_IGNORED_GROUPS) counts as an institution.
+    institutionGroups: (process.env.PEACH_INSTITUTION_GROUPS || "").split(",").map((v) => v.trim()).filter(Boolean),
+    institutionGroupPrefix: process.env.PEACH_INSTITUTION_GROUP_PREFIX || "",
+    ignoredGroups: (process.env.PEACH_IGNORED_GROUPS || "").split(",").map((v) => v.trim()).filter(Boolean),
   },
   smtp: {
     host: process.env.SMTP_HOST || "",
