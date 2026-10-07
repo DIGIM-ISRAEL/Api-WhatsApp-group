@@ -28,7 +28,8 @@ async function getContactInfo(chatId) {
 
 // Lists every group the instance's phone is in, with its chatId (…@g.us) and name.
 async function listGroups() {
-  const { data } = await client.get(url("getContacts"));
+  // getChats is the method that worked for finding group ids on this instance.
+  const { data } = await client.get(url("getChats"));
   return (data || []).filter((c) => c.id?.endsWith("@g.us")).map((c) => ({ id: c.id, name: c.name }));
 }
 
