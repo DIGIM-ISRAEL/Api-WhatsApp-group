@@ -140,7 +140,9 @@ function createServer() {
   // discover/verify how institutions are linked (see PEACH_INSTITUTION_LINK_FIELD).
   app.get("/admin/peach-contact", requireToken, async (req, res) => {
     try {
-      const contact = await peach.findContactByPhone(req.query.phone);
+      const contact = req.query.contactId
+        ? await peach.findContactById(req.query.contactId)
+        : await peach.findContactByPhone(req.query.phone);
       res.json({ contact, institution: contact ? checkInstitution(contact) : null });
     } catch (err) {
       res.status(502).json({ error: err.response?.data || err.message });

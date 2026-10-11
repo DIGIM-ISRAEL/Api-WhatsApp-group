@@ -31,6 +31,17 @@ async function findContactByPhone(phoneNumber) {
   }
 }
 
+// POST /getContact { contactId } -> { contacts: [...] }
+async function findContactById(contactId) {
+  try {
+    const { data } = await client.post("/getContact", { contactId });
+    return data?.contacts?.[0] || null;
+  } catch (err) {
+    if (err.response?.data?.message === "contactNotFound") return null;
+    throw err;
+  }
+}
+
 // POST /contacts -> { contactBody, contactId, failedCustomProperties }
 async function createContact(contact) {
   const { data } = await client.post("/contacts", contact);
@@ -46,4 +57,4 @@ async function updateContact(contactId, patch) {
   return data;
 }
 
-module.exports = { findContactByPhone, createContact, updateContact };
+module.exports = { findContactById, findContactByPhone, createContact, updateContact };
