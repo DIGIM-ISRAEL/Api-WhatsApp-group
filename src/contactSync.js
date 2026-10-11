@@ -13,6 +13,12 @@ function parseGroupsField(value) {
     .filter(Boolean);
 }
 
+// Peach returns `groups` as ids with names in `groups_labels` ({id: name}).
+function contactHasGroup(contact, label) {
+  const labels = contact.groups_labels || {};
+  return (contact.groups || []).some((g) => g === label || labels[g] === label);
+}
+
 function resolveNames(rawPhone, firstName, lastName) {
   return {
     firstName: firstName || config.peach.defaultFirstName,
@@ -55,7 +61,7 @@ async function upsertContactInGroup({ rawPhone, groupLabel, groupChatId, notify 
     logger.info(`Created Peach contact ${created?.contactId || ""} for ${phone} in group "${groupLabel}"`);
     result = { action: "created", contact: created };
   } else if (config.peach.groupSyncMode === "nativeGroups") {
-    if ((existing.groups || []).includes(groupLabel)) {
+    if (contactHasGroup(existing, groupLabel)) {
       logger.info(`Contact ${existing.contactId} already in group "${groupLabel}", skipping`);
       result = { action: "unchanged", contact: existing };
     } else {

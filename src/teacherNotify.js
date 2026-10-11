@@ -9,7 +9,10 @@ const { sendMail } = require("./mailer");
  */
 function checkInstitution(contact) {
   const { institutionGroups, institutionGroupPrefix, ignoredGroups } = config.teacherNotify;
-  const groups = contact?.groups || [];
+  // Real Peach responses list `groups` as ids and put the names in
+  // `groups_labels` ({id: name}); fall back to raw entries if absent.
+  const labels = contact?.groups_labels || {};
+  const groups = (contact?.groups || []).map((g) => labels[g] || g);
   let matches;
   if (institutionGroups.length) {
     matches = groups.filter((g) => institutionGroups.includes(g));
